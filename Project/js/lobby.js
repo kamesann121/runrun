@@ -93,12 +93,35 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Babylon.jsの初期化やspawnPlayersなどはそのままでOK！
-  // 次のステップで3Dロビーの見た目をコンパクトにしていくよ！
-
-  // ...（Babylon.js部分は省略中。次で改良する！）
-
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+
+  // Babylon.jsの初期化とモデル読み込み
+  const canvas = document.getElementById('renderCanvas');
+  const engine = new BABYLON.Engine(canvas, true);
+  const scene = new BABYLON.Scene(engine);
+
+  const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 2.5, 3, BABYLON.Vector3.Zero(), scene);
+  camera.attachControl(canvas, true);
+
+  const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+
+  const modelUrl = 'assets/models/lightCharacter.glb';
+  BABYLON.SceneLoader.ImportMesh("", "", modelUrl, scene, (meshes) => {
+    meshes.forEach(m => {
+      m.position = new BABYLON.Vector3(0, 0.1, 0);
+      m.scaling = new BABYLON.Vector3(1, 1, 1);
+    });
+
+    document.getElementById('loader').classList.add('hidden');
+  });
+
+  engine.runRenderLoop(() => {
+    scene.render();
+  });
+
+  window.addEventListener('resize', () => {
+    engine.resize();
+  });
 });
