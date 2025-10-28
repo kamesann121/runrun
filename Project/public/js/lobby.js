@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let players = [];
   window.avatarMap = new Map();
 
-  const socket = io(); // socket.io接続！
+  const socket = io();
 
   joinBtn.addEventListener('click', () => {
     const name = (playerNameInput.value || 'Player').slice(0, 16);
@@ -97,7 +97,14 @@ document.addEventListener('DOMContentLoaded', () => {
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  // Babylon.jsの初期化とモデル読み込み
+  function updateAvatarColor(color) {
+    const mesh = avatarMap.get(local?.id);
+    if (mesh && mesh.material) {
+      mesh.material.diffuseColor = BABYLON.Color3.FromHexString(color);
+    }
+  }
+
+  // Babylon.jsの初期化
   const canvas = document.getElementById('renderCanvas');
   const engine = new BABYLON.Engine(canvas, true);
   const scene = new BABYLON.Scene(engine);
@@ -108,14 +115,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
   const modelUrl = 'assets/models/lightCharacter.glb';
-  BABYLON.SceneLoader.ImportMesh("", "", modelUrl, scene, (meshes) => {
-    meshes.forEach(m => {
-      m.position = new BABYLON.Vector3(0, 0.1, 0);
-      m.scaling = new BABYLON.Vector3(1, 1, 1);
-    });
 
-    document.getElementById('loader').classList.add('hidden');
-  });
+  function spawnPlayers() {
+    avatarMap.forEach(mesh => {
+      mesh.dispose();
+    });
+    avatarMap.clear();
+
+    players.forEach((p, i) => {
+      BABYLON.SceneLoader.ImportMesh("", "", modelUrl, scene, (meshes) => {
+        const root = meshes[0];
+        root.position = new BABYLON.Vector3(i * 1.5 - 2, 0.1, 0);
+        root.scaling = new BABYLON.Vector3(1, 1, 1);
+
+        const mat = new BABYLON.StandardMaterial("mat", scene);
+        mat.diffuseColor = BABYLON.Color3.FromHexString(p.color);
+        root.material = mat;
+
+        avatarMap.set(p.id, root);
+        if (p.id === local?.id) {
+          document.getElementById('loader').classList.add('hidden');
+        }
+      });
+    });
+  }
 
   engine.runRenderLoop(() => {
     scene.render();
