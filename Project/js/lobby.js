@@ -1,14 +1,15 @@
-// ローカルモックのロビー実装 + Babylon.js ステージ表示（サードパーソン風プレビュー）
+// lobby.js - ロビー UI + Babylon.js ステージ (glb 読み込み対応)
 document.addEventListener('DOMContentLoaded',()=> {
   const playersListEl = document.getElementById('playersList');
   const playerNameInput = document.getElementById('playerName');
   const joinBtn = document.getElementById('joinBtn');
   const leaveBtn = document.getElementById('leaveBtn');
   const skinOptions = document.getElementById('skinOptions');
-  const helmetToggle = document.getElementById('helmetToggle');
+  const helmetToggle = document.getElementById('toggleHelmet');
   const readyBtn = document.getElementById('readyBtn');
   const currentName = document.getElementById('currentName');
   const startGameBtn = document.getElementById('startGameBtn');
+  const colorPicker = document.getElementById('colorPicker');
 
   // 初期スキンパレット
   const palette = ['#3A86FF','#FF006E','#FFD166','#06D6A0','#8E44AD','#FF7F50'];
@@ -25,6 +26,7 @@ document.addEventListener('DOMContentLoaded',()=> {
 
   let local = null;
   let players = [];
+  window.avatarMap = new Map(); // アバター参照保存
 
   function selectSkin(color){
     if(!local) return;
@@ -32,6 +34,7 @@ document.addEventListener('DOMContentLoaded',()=> {
     updatePlayersList();
     updateAvatarColor(color);
     document.querySelectorAll('.skinTile').forEach(t=> t.classList.toggle('selected', t.dataset.color===color));
+    colorPicker.value = color;
   }
 
   joinBtn.addEventListener('click', ()=> {
@@ -43,13 +46,15 @@ document.addEventListener('DOMContentLoaded',()=> {
     leaveBtn.disabled = false;
     updatePlayersList();
     selectSkin(local.color);
-    // enable hosting controls for now
     startGameBtn.disabled = false;
+    // spawn avatars (glb or fallback)
+    spawnPlayers();
   });
 
   leaveBtn.addEventListener('click', ()=> {
     local = null; players = []; updatePlayersList();
     joinBtn.disabled = false; leaveBtn.disabled = true; startGameBtn.disabled = true;
+    spawnPlayers();
   });
 
   helmetToggle.addEventListener('change', ()=> {
@@ -57,6 +62,14 @@ document.addEventListener('DOMContentLoaded',()=> {
     local.helmet = helmetToggle.checked;
     updateAvatarHelmet(local.helmet);
     updatePlayersList();
+  });
+
+  colorPicker.addEventListener('input', (e)=> {
+    const c = e.target.value;
+    if(!local) return;
+    local.color = c;
+    updatePlayersList();
+    updateAvatarColor(c);
   });
 
   readyBtn.addEventListener('click', ()=> {
@@ -76,7 +89,7 @@ document.addEventListener('DOMContentLoaded',()=> {
     });
   }
 
-  // Babylon.js 初期化
+  // ---------- Babylon.js 初期化 ----------
   const canvas = document.getElementById('renderCanvas');
   const engine = new BABYLON.Engine(canvas, true, {preserveDrawingBuffer:true,stencil:true});
   const scene = new BABYLON.Scene(engine);
@@ -92,15 +105,15 @@ document.addEventListener('DOMContentLoaded',()=> {
   const sun = new BABYLON.DirectionalLight("dir", new BABYLON.Vector3(-0.3,-1,0.4), scene);
   sun.position = new BABYLON.Vector3(10,10,10);
 
-  // ステージの地面と円形台
+  // 地面と台
   const ground = BABYLON.MeshBuilder.CreateGround("g",{width:20,height:20},scene);
   const mat=new BABYLON.StandardMaterial("gm",scene); mat.diffuseColor=new BABYLON.Color3(0.08,0.12,0.09); ground.material=mat;
   const podium = BABYLON.MeshBuilder.CreateCylinder("pod",{diameter:6,height:0.5,subdivisions:32},scene);
   podium.position.y = 0.25;
   const podMat = new BABYLON.StandardMaterial("pm",scene); podMat.diffuseColor = new BABYLON.Color3(0.12,0.14,0.18); podium.material = podMat;
 
-  // 簡易アバター生成関数（rootノードを返す）
-  function createAvatar(color='#3A86FF', helmet=false){
+  // 簡易フォールバックアバター（初期）
+  function createFallbackAvatar(color='#3A86FF', helmet=false){
     const root = new BABYLON.TransformNode("avatar", scene);
     const body = BABYLON.MeshBuilder.CreateCapsule("body",{height:1.2,radius:0.35},scene);
     body.parent = root; body.position.y = 1;
@@ -113,61 +126,152 @@ document.addEventListener('DOMContentLoaded',()=> {
     return root;
   }
 
-  // 表示するプレイヤーのアバターマップ
-  const avatarMap = new Map();
-  function spawnPlayers(){
-    // cleanup
-    avatarMap.forEach((v)=> v.dispose && v.dispose());
+  // spawnPlayers: まず glb を試してなければフォールバック
+  async function spawnPlayers() {
+    // Dispose existing avatars
+    avatarMap.forEach(v => { try { v.root && v.root.dispose(); } catch(e){} });
     avatarMap.clear();
-    // place players around podium
-    players.forEach((p,i)=>{
-      const root = createAvatar(p.color, p.helmet);
-      const angle = (i / Math.max(1, players.length)) * Math.PI * 2;
-      root.position = new BABYLON.Vector3(Math.cos(angle)*2.4,0,Math.sin(angle)*2.4);
-      avatarMap.set(p.id, root);
+
+    // Try to load GLB avatars; if failed or missing, use fallback
+    const modelUrl = 'assets/models/character.glb';
+    let useGlb = false;
+    try {
+      // quick HEAD-ish check by attempting to fetch
+      const resp = await fetch(modelUrl, { method: 'HEAD' });
+      useGlb = resp.ok;
+    } catch(e) {
+      useGlb = false;
+    }
+
+    if (useGlb) {
+      await spawnGlbPlayers(players, scene);
+    } else {
+      // fallback placement
+      players.forEach((p,i)=>{
+        const root = createFallbackAvatar(p.color, p.helmet);
+        const angle = (i / Math.max(1, players.length)) * Math.PI * 2;
+        root.position = new BABYLON.Vector3(Math.cos(angle)*2.4,0,Math.sin(angle)*2.4);
+        avatarMap.set(p.id, { root, anims: [] });
+      });
+    }
+  }
+
+  // ---------- glb 読み込みユーティリティ ----------
+  function showLoader(on) {
+    const el = document.getElementById('loader');
+    if (!el) return;
+    el.classList.toggle('hidden', !on);
+  }
+
+  function loadGlbAvatar(scene, url, opts = {}) {
+    return new Promise((resolve, reject) => {
+      BABYLON.SceneLoader.ImportMesh("", "", url, scene, (meshes, particleSystems, skeletons, animationGroups) => {
+        const root = new BABYLON.TransformNode("glbRoot", scene);
+        meshes.forEach(m => { m.parent = root; m.checkCollisions = false; m.receiveShadows = false; });
+        root.scaling = new BABYLON.Vector3(opts.scale || 1, opts.scale || 1, opts.scale || 1);
+        root.position = opts.position || new BABYLON.Vector3(0, 0, 0);
+        const anims = animationGroups || [];
+        const skeleton = skeletons && skeletons[0] ? skeletons[0] : null;
+        resolve({ root, meshes, skeleton, anims });
+      }, null, (scene, error) => reject(error));
     });
   }
 
-  // update color/helmet on local avatar
-  function updateAvatarColor(c){
-    if(!local) return;
-    const node = avatarMap.get(local.id);
-    if(!node) return;
-    node.getChildMeshes().forEach(m=>{
-      if(m.material && m.name.startsWith("body")) m.material.diffuseColor = hexToColor3(c);
-    });
-  }
-  function updateAvatarHelmet(flag){
-    if(!local) return;
-    spawnPlayers();
+  async function spawnGlbPlayers(playersList, scene) {
+    showLoader(true);
+    for (let i = 0; i < playersList.length; i++) {
+      const p = playersList[i];
+      const angle = (i / Math.max(1, playersList.length)) * Math.PI * 2;
+      const pos = new BABYLON.Vector3(Math.cos(angle) * 2.4, 0, Math.sin(angle) * 2.4);
+      try {
+        const res = await loadGlbAvatar(scene, 'assets/models/character.glb', { scale: 1.0, position: pos });
+        res.root.position = pos;
+        // マテリアル色差し替え例
+        res.meshes.forEach(m => {
+          if (m.material && m.material.albedoColor) {
+            m.material.albedoColor = hexToColor3(p.color || '#3A86FF');
+          } else if (m.material && m.material.diffuseColor) {
+            m.material.diffuseColor = hexToColor3(p.color || '#3A86FF');
+          }
+        });
+        avatarMap.set(p.id, { root: res.root, anims: res.anims, skeleton: res.skeleton });
+        // 初期Idle再生
+        if (res.anims && res.anims.length) {
+          const idle = res.anims.find(a => /idle/i.test(a.name)) || res.anims[0];
+          idle && idle.start(true);
+        }
+      } catch (e) {
+        console.warn('GLB load failed for', p.name, e);
+        // fallback for this player
+        const root = createFallbackAvatar(p.color, p.helmet);
+        root.position = pos;
+        avatarMap.set(p.id, { root, anims: [] });
+      }
+    }
+    showLoader(false);
   }
 
-  // エモート（簡易：上下にスケールするアニメ）
+  // ---------- エモート / アニメ制御 ----------
+  function playEmoteForPlayer(playerId, emoteName) {
+    const rec = avatarMap.get(playerId);
+    if (!rec) return;
+    if (rec.anims && rec.anims.length) {
+      rec.anims.forEach(a => a.stop());
+      const target = rec.anims.find(a => new RegExp(emoteName, 'i').test(a.name));
+      if (target) {
+        target.start(false, 1.0, target.from, target.to, false);
+        if (target.onAnimationGroupEndObservable) {
+          target.onAnimationGroupEndObservable.addOnce(() => {
+            const idle = rec.anims.find(a => /idle/i.test(a.name)) || rec.anims[0];
+            idle && idle.start(true);
+          });
+        }
+        return;
+      }
+    }
+    // fallback simple pulse
+    const node = rec.root;
+    BABYLON.Animation.CreateAndStartAnimation("pulse", node, "scaling.y", 30, 10, node.scaling.y, node.scaling.y * 1.12, 0, null, () => { node.scaling.y = 1; });
+  }
+
   document.querySelectorAll('.emoteBtn').forEach(btn=>{
     btn.addEventListener('click',()=> {
       if(!local) return;
-      const node = avatarMap.get(local.id);
-      if(!node) return;
-      BABYLON.Animation.CreateAndStartAnimation("emote", node, "scaling.y", 30, 10, node.scaling.y, node.scaling.y*1.2, 0, null, ()=> {
-        node.scaling.y = 1;
-      });
+      const anim = btn.dataset.anim || btn.textContent;
+      playEmoteForPlayer(local.id, anim);
     });
   });
 
-  // joinでスポーン
-  const obs = new MutationObserver(()=> spawnPlayers());
-  // simple update loop to reflect list changes
-  function updateLoop(){
-    // sync mocked players to avatars
-    spawnPlayers();
-    engine.resize();
-    requestAnimationFrame(updateLoop);
+  // アバター色更新（既存読み込みモデル両対応）
+  function updateAvatarColor(c){
+    if(!local) return;
+    const rec = avatarMap.get(local.id);
+    if(!rec) return;
+    // GLB の場合: メッシュの material を更新
+    rec.root.getChildMeshes().forEach(m=>{
+      if(m.material && m.material.albedoColor) m.material.albedoColor = hexToColor3(c);
+      else if(m.material && m.material.diffuseColor) m.material.diffuseColor = hexToColor3(c);
+    });
   }
-  updateLoop();
 
+  function updateAvatarHelmet(flag){
+    // simplest approach: respawn avatars to apply helmet toggle
+    spawnPlayers();
+  }
+
+  // ---------- レンダーループ ----------
   engine.runRenderLoop(()=> scene.render());
   window.addEventListener('resize', ()=> engine.resize());
 
-  // helper
-  function hexToColor3(hex){ const h=hex.replace('#',''); return new BABYLON.Color3(parseInt(h.slice(0,2),16)/255,parseInt(h.slice(2,4),16)/255,parseInt(h.slice(4,6),16)/255) }
+  // ---------- ユーティリティ ----------
+  function hexToColor3(hex){
+    const h=(hex||'#3A86FF').replace('#','');
+    const r=parseInt(h.substring(0,2),16)/255;
+    const g=parseInt(h.substring(2,4),16)/255;
+    const b=parseInt(h.substring(4,6),16)/255;
+    return new BABYLON.Color3(r,g,b);
+  }
+
+  // 初期化: 画面読み込み時のプレースホルダ配置
+  spawnPlayers();
 });
