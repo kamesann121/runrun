@@ -1,4 +1,4 @@
-// lobby.js - ロビー UI + Babylon.js ステージ (glb 読み込み対応)
+// lobby.js - フィルタ対策を意識した最小依存ロビーコード
 document.addEventListener('DOMContentLoaded',()=> {
   const playersListEl = document.getElementById('playersList');
   const playerNameInput = document.getElementById('playerName');
@@ -11,22 +11,19 @@ document.addEventListener('DOMContentLoaded',()=> {
   const startGameBtn = document.getElementById('startGameBtn');
   const colorPicker = document.getElementById('colorPicker');
 
-  // 初期スキンパレット
   const palette = ['#3A86FF','#FF006E','#FFD166','#06D6A0','#8E44AD','#FF7F50'];
   palette.forEach(c=>{
     const t = document.createElement('div');
     t.className='skinTile';
     t.style.background = c;
     t.dataset.color = c;
-    t.addEventListener('click', ()=> {
-      selectSkin(c);
-    });
+    t.addEventListener('click', ()=> selectSkin(c));
     skinOptions.appendChild(t);
   });
 
   let local = null;
   let players = [];
-  window.avatarMap = new Map(); // アバター参照保存
+  window.avatarMap = new Map();
 
   function selectSkin(color){
     if(!local) return;
@@ -42,12 +39,9 @@ document.addEventListener('DOMContentLoaded',()=> {
     local = {id:Date.now(), name, color:palette[0], helmet:false, ready:false};
     players = [local, {id:999,name:'Bot1',color:'#FFD166',helmet:false,ready:false}];
     currentName.textContent = name;
-    joinBtn.disabled = true;
-    leaveBtn.disabled = false;
+    joinBtn.disabled = true; leaveBtn.disabled = false; startGameBtn.disabled = false;
     updatePlayersList();
     selectSkin(local.color);
-    startGameBtn.disabled = false;
-    // spawn avatars (glb or fallback)
     spawnPlayers();
   });
 
@@ -84,7 +78,7 @@ document.addEventListener('DOMContentLoaded',()=> {
     players.forEach(p=>{
       const li=document.createElement('li');
       li.className='playerItem';
-      li.innerHTML = `<span style="color:${p.color}">${p.name}</span><span>${p.ready? '✅':'—'}</span>`;
+      li.innerHTML = `<span style="color:${p.color}">${escapeHtml(p.name)}</span><span>${p.ready? '✅':'—'}</span>`;
       playersListEl.appendChild(li);
     });
   }
@@ -105,14 +99,12 @@ document.addEventListener('DOMContentLoaded',()=> {
   const sun = new BABYLON.DirectionalLight("dir", new BABYLON.Vector3(-0.3,-1,0.4), scene);
   sun.position = new BABYLON.Vector3(10,10,10);
 
-  // 地面と台
   const ground = BABYLON.MeshBuilder.CreateGround("g",{width:20,height:20},scene);
   const mat=new BABYLON.StandardMaterial("gm",scene); mat.diffuseColor=new BABYLON.Color3(0.08,0.12,0.09); ground.material=mat;
   const podium = BABYLON.MeshBuilder.CreateCylinder("pod",{diameter:6,height:0.5,subdivisions:32},scene);
   podium.position.y = 0.25;
   const podMat = new BABYLON.StandardMaterial("pm",scene); podMat.diffuseColor = new BABYLON.Color3(0.12,0.14,0.18); podium.material = podMat;
 
-  // 簡易フォールバックアバター（初期）
   function createFallbackAvatar(color='#3A86FF', helmet=false){
     const root = new BABYLON.TransformNode("avatar", scene);
     const body = BABYLON.MeshBuilder.CreateCapsule("body",{height:1.2,radius:0.35},scene);
@@ -126,27 +118,22 @@ document.addEventListener('DOMContentLoaded',()=> {
     return root;
   }
 
-  // spawnPlayers: まず glb を試してなければフォールバック
   async function spawnPlayers() {
-    // Dispose existing avatars
     avatarMap.forEach(v => { try { v.root && v.root.dispose(); } catch(e){} });
     avatarMap.clear();
 
-    // Try to load GLB avatars; if failed or missing, use fallback
     const modelUrl = 'assets/models/character.glb';
     let useGlb = false;
     try {
-      // quick HEAD-ish check by attempting to fetch
       const resp = await fetch(modelUrl, { method: 'HEAD' });
       useGlb = resp.ok;
     } catch(e) {
       useGlb = false;
     }
 
-    if (useGlb) {
+    if(useGlb) {
       await spawnGlbPlayers(players, scene);
     } else {
-      // fallback placement
       players.forEach((p,i)=>{
         const root = createFallbackAvatar(p.color, p.helmet);
         const angle = (i / Math.max(1, players.length)) * Math.PI * 2;
@@ -156,7 +143,6 @@ document.addEventListener('DOMContentLoaded',()=> {
     }
   }
 
-  // ---------- glb 読み込みユーティリティ ----------
   function showLoader(on) {
     const el = document.getElementById('loader');
     if (!el) return;
@@ -186,7 +172,6 @@ document.addEventListener('DOMContentLoaded',()=> {
       try {
         const res = await loadGlbAvatar(scene, 'assets/models/character.glb', { scale: 1.0, position: pos });
         res.root.position = pos;
-        // マテリアル色差し替え例
         res.meshes.forEach(m => {
           if (m.material && m.material.albedoColor) {
             m.material.albedoColor = hexToColor3(p.color || '#3A86FF');
@@ -195,14 +180,12 @@ document.addEventListener('DOMContentLoaded',()=> {
           }
         });
         avatarMap.set(p.id, { root: res.root, anims: res.anims, skeleton: res.skeleton });
-        // 初期Idle再生
         if (res.anims && res.anims.length) {
           const idle = res.anims.find(a => /idle/i.test(a.name)) || res.anims[0];
           idle && idle.start(true);
         }
       } catch (e) {
-        console.warn('GLB load failed for', p.name, e);
-        // fallback for this player
+        console.warn('GLB load failed for', p.name);
         const root = createFallbackAvatar(p.color, p.helmet);
         root.position = pos;
         avatarMap.set(p.id, { root, anims: [] });
@@ -211,7 +194,6 @@ document.addEventListener('DOMContentLoaded',()=> {
     showLoader(false);
   }
 
-  // ---------- エモート / アニメ制御 ----------
   function playEmoteForPlayer(playerId, emoteName) {
     const rec = avatarMap.get(playerId);
     if (!rec) return;
@@ -229,7 +211,6 @@ document.addEventListener('DOMContentLoaded',()=> {
         return;
       }
     }
-    // fallback simple pulse
     const node = rec.root;
     BABYLON.Animation.CreateAndStartAnimation("pulse", node, "scaling.y", 30, 10, node.scaling.y, node.scaling.y * 1.12, 0, null, () => { node.scaling.y = 1; });
   }
@@ -242,12 +223,10 @@ document.addEventListener('DOMContentLoaded',()=> {
     });
   });
 
-  // アバター色更新（既存読み込みモデル両対応）
   function updateAvatarColor(c){
     if(!local) return;
     const rec = avatarMap.get(local.id);
     if(!rec) return;
-    // GLB の場合: メッシュの material を更新
     rec.root.getChildMeshes().forEach(m=>{
       if(m.material && m.material.albedoColor) m.material.albedoColor = hexToColor3(c);
       else if(m.material && m.material.diffuseColor) m.material.diffuseColor = hexToColor3(c);
@@ -255,15 +234,12 @@ document.addEventListener('DOMContentLoaded',()=> {
   }
 
   function updateAvatarHelmet(flag){
-    // simplest approach: respawn avatars to apply helmet toggle
     spawnPlayers();
   }
 
-  // ---------- レンダーループ ----------
   engine.runRenderLoop(()=> scene.render());
   window.addEventListener('resize', ()=> engine.resize());
 
-  // ---------- ユーティリティ ----------
   function hexToColor3(hex){
     const h=(hex||'#3A86FF').replace('#','');
     const r=parseInt(h.substring(0,2),16)/255;
@@ -272,6 +248,7 @@ document.addEventListener('DOMContentLoaded',()=> {
     return new BABYLON.Color3(r,g,b);
   }
 
-  // 初期化: 画面読み込み時のプレースホルダ配置
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
   spawnPlayers();
 });
