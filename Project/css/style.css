@@ -1,0 +1,17 @@
+:root{--bg:#0f1720;--panel:#0b1220;--accent:#1f6feb;--muted:#9aa6b2}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#07111a, #0f1720);color:#e6eef6;font-family:system-ui,Segoe UI,Roboto}
+#container{display:grid;grid-template-columns:220px 1fr 260px;gap:12px;height:100vh;padding:12px}
+aside{background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;overflow:auto}
+main{display:flex;flex-direction:column;gap:8px}
+#stage{flex:1;position:relative;border-radius:8px;overflow:hidden;background:#081018}
+#renderCanvas{width:100%;height:100%;display:block}
+#stageHeader{display:flex;gap:8px}
+#stageFooter{display:flex;justify-content:space-between;align-items:center;padding:8px}
+button,input,select{padding:8px;border-radius:6px;border:0;background:#16304a;color:#fff}
+.emoteBtn{background:#1b8a48}
+#skinOptions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.skinTile{width:56px;height:56px;border-radius:6px;cursor:pointer;border:2px solid transparent;display:flex;align-items:center;justify-content:center;font-weight:bold}
+.skinTile.selected{outline:2px solid var(--accent)}
+#playersList{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.playerItem{padding:6px;border-radius:6px;background:rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center}
