@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>勉強</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+</head>
+<body>
+  <div id="container">
+    <aside id="leftPanel">
+      <h2>参加者</h2>
+      <ul id="playersList"></ul>
+    </aside>
+
+    <main id="stageWrap">
+      <div id="stageHeader">
+        <input id="playerName" placeholder="Player name" maxlength="16" />
+        <button id="joinBtn">参加</button>
+        <button id="leaveBtn" disabled>退出</button>
+      </div>
+      <div id="stage">
+        <canvas id="renderCanvas"></canvas>
+      </div>
+      <div id="stageFooter">
+        <div id="previewLabel">選択中: <span id="currentName">--</span></div>
+        <div id="controls">
+          <button class="emoteBtn" data-anim="wave">Wave</button>
+          <button class="emoteBtn" data-anim="dance">Dance</button>
+          <button id="readyBtn">Ready</button>
+        </div>
+      </div>
+    </main>
+
+    <aside id="rightPanel">
+      <h2>スキン</h2>
+      <div id="skinOptions"></div>
+      <label><input id="helmetToggle" type="checkbox" /> ヘルメット</label>
+      <h3>部屋設定</h3>
+      <label>人数<select id="maxPlayers"><option>2</option><option>4</option><option>8</option></select></label>
+      <button id="startGameBtn" disabled>開始（ホスト）</button>
+    </aside>
+  </div>
+
+  <script src="js/lobby.js"></script>
+</body>
+</html>
