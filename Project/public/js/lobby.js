@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-  const modelUrl = 'assets/models/lightCharacter.glb';
+  const modelUrl = '/assets/models/lightCharacter.glb';
 
   function spawnPlayers() {
     avatarMap.forEach(mesh => {
