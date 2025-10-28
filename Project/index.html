@@ -2,29 +2,37 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>LoL</title>
+  <title>School Battle Lobby</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="教育用のブラウザロビー。チームワークと戦略を学ぶ目的の非暴力コンテンツです" />
+  <meta name="keywords" content="教育,授業,ブラウザゲーム,学習" />
   <link rel="stylesheet" href="css/style.css" />
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
-  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+  <script defer src="libs/babylon.js"></script>
+  <script defer src="js/lobby.js"></script>
 </head>
 <body>
-  <div id="container">
+  <header id="siteHeader">
+    <h1>School Battle Lobby</h1>
+    <p class="purpose">用途: 授業・課外学習での利用を想定した教育目的コンテンツ。暴力描写は最小化され個人情報は収集しません。</p>
+  </header>
+
+  <main id="container">
     <aside id="leftPanel">
       <h2>参加者</h2>
       <ul id="playersList"></ul>
     </aside>
 
-    <main id="stageWrap">
+    <section id="stageWrap">
       <div id="stageHeader">
-        <input id="playerName" placeholder="Player name" maxlength="16" />
+        <label for="playerName">プレイヤー名</label>
+        <input id="playerName" placeholder="名前を入力" maxlength="16" />
         <button id="joinBtn">参加</button>
         <button id="leaveBtn" disabled>退出</button>
       </div>
 
       <div id="stage">
-        <canvas id="renderCanvas"></canvas>
-        <div id="loader" class="hidden">モデル読み込み中…</div>
+        <canvas id="renderCanvas" aria-label="3Dロビー"></canvas>
+        <div id="loader" class="hidden" role="status" aria-live="polite">モデル読み込み中…</div>
       </div>
 
       <div id="stageFooter">
@@ -35,24 +43,26 @@
           <button id="readyBtn">Ready</button>
         </div>
       </div>
-    </main>
+    </section>
 
     <aside id="rightPanel">
-      <h2>スキン</h2>
-      <div id="skinOptions"></div>
+      <h2>スキン設定</h2>
+      <div id="skinOptions" aria-hidden="false"></div>
 
       <div id="skinParts">
         <h4>パーツ</h4>
         <label><input type="checkbox" id="toggleHelmet"> ヘルメット</label>
-        <label>色: <input type="color" id="colorPicker" value="#3A86FF"></label>
+        <label for="colorPicker">色: </label><input type="color" id="colorPicker" value="#3A86FF" />
       </div>
 
       <h3>部屋設定</h3>
-      <label>人数<select id="maxPlayers"><option>2</option><option>4</option><option>8</option></select></label>
+      <label>最大人数<select id="maxPlayers"><option>2</option><option>4</option><option>8</option></select></label>
       <button id="startGameBtn" disabled>開始（ホスト）</button>
     </aside>
-  </div>
+  </main>
 
-  <script src="js/lobby.js"></script>
+  <footer id="siteFooter">
+    <small>このサイトは教育用です。広告やトラッキングはありません。問題があれば README.md の連絡先まで。</small>
+  </footer>
 </body>
 </html>
